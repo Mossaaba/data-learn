@@ -28,5 +28,6 @@ services:
       - PYSPARK_PYTHON=python3
     ports:
       - "8888:8888"   # Jupyter Notebook UI
+      - "4040:4040"   # Spark UI
     volumes:
       - ./notebooks:/home/jovyan/work
