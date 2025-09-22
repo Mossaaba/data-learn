@@ -1,5 +1,7 @@
 # data-learn
 
+https://app.diagrams.net/#G1jMjnG4OHOrY8jtv7EEms94-Gzt3pxaZA#%7B%22pageId%22%3A%22EAk9UfSw3r8_gIUQp022%22%7D
+
 
 # Run docker compose : 
 docker-compose up -d
