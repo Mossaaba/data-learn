@@ -31,3 +31,17 @@ services:
       - "4040:4040"   # Spark UI
     volumes:
       - ./notebooks:/home/jovyan/work
+
+  akhq:
+    image: tchiotludo/akhq:latest
+    depends_on:
+      - kafka
+    environment:
+      AKHQ_CONFIGURATION: |-
+        akhq:
+          connections:
+            kafka-cluster:
+              properties:
+                bootstrap.servers: "kafka:9092"
+    ports:
+      - "8080:8080"   # AKHQ Web UI
