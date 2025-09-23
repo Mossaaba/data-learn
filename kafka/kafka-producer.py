@@ -4,7 +4,7 @@ import json
 # Configuration du producteur Kafka
 KAFKA_CONFIG = {
     
-    'bootstrap_servers': 'localhost:9092',
+    'bootstrap_servers': 'kafka:9092',
     'value_serializer': lambda v: json.dumps(v).encode('utf-8'),
     'key_serializer': lambda k: str(k).encode('utf-8'),
     'acks': 'all',

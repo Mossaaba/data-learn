@@ -1,9 +1,8 @@
 from kafka import KafkaConsumer
 import json
 
-# Configuration du consommateur Kafka
 KAFKA_CONFIG = {
-    'bootstrap_servers': 'localhost:9092',
+    'bootstrap_servers': 'kafka:9092',  # Docker network
     'auto_offset_reset': 'earliest',
     'enable_auto_commit': True,
     'group_id': 'my-group',
@@ -11,11 +10,8 @@ KAFKA_CONFIG = {
     'key_deserializer': lambda k: k.decode('utf-8') if k else None
 }
 
-def consume_messages(topic):
-    consumer = KafkaConsumer(topic, **KAFKA_CONFIG)
-    print(f"Lecture des messages du topic : {topic}")
-    for message in consumer:
-        print(f"Clé : {message.key}, Valeur : {message.value}")
+consumer = KafkaConsumer("test-topic", **KAFKA_CONFIG)
+print("Listening for messages on 'test-topic'...")
 
-if __name__ == "__main__":
-    consume_messages('test-topic')
+for message in consumer:
+    print(f"Key: {message.key}, Value: {message.value}")
