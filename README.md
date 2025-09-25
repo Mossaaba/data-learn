@@ -12,6 +12,15 @@ docker ps --> container id
 docker exec -it <kafka-container-id> kafka-topics --create \
     --topic test-topic --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
 
+
+# Send message : 
+
+docker compose up kafka-producer
+
+
+# Read message : 
+docker compose up kafka-consumer
+
 # describe topics configs
 docker-compose exec kafka kafka-configs --bootstrap-server localhost:9092 --entity-type topics --entity-name test-topic --describe 
 
