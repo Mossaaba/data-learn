@@ -1,27 +1,76 @@
 # data-learn
 
-https://app.diagrams.net/#G1jMjnG4OHOrY8jtv7EEms94-Gzt3pxaZA#%7B%22pageId%22%3A%22EAk9UfSw3r8_gIUQp022%22%7D
+Data pipeline with Kafka, Spark, and Airflow for real-time data processing and workflow orchestration.
 
+## Architecture
 
-# Run docker compose : 
+- **Apache Kafka**: Message streaming platform
+- **Apache Spark**: Distributed data processing (PySpark)
+- **Apache Airflow**: Workflow orchestration
+- **AKHQ**: Kafka management UI
+- **PostgreSQL**: Airflow metadata database
+- **Redis**: Airflow message broker
+
+## Quick Start
+
+### 1. Start all services
+```bash
 docker-compose up -d
+```
 
-# Create a topic 
-docker ps --> container id 
+### 2. Access the UIs
+- **Airflow**: http://localhost:8081 (admin/admin)
+- **AKHQ (Kafka UI)**: http://localhost:8080
+- **Jupyter (PySpark)**: http://localhost:8888
+- **Spark UI**: http://localhost:4040
 
-docker exec -it <kafka-container-id> kafka-topics --create \
+### 3. Initialize Airflow (first time only)
+```bash
+docker-compose run --rm airflow-init
+```
+
+## Kafka Operations
+
+### Create a topic
+```bash
+docker exec -it $(docker ps -q -f name=kafka) kafka-topics --create \
     --topic test-topic --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+```
 
-
-# Send message : 
-
+### Send messages
+```bash
 docker compose up kafka-producer
+```
 
-
-# Read message : 
+### Read messages
+```bash
 docker compose up kafka-consumer
+```
 
-# describe topics configs
-docker-compose exec kafka kafka-configs --bootstrap-server localhost:9092 --entity-type topics --entity-name test-topic --describe 
+### Describe topic configs
+```bash
+docker-compose exec kafka kafka-configs --bootstrap-server localhost:9092 \
+    --entity-type topics --entity-name test-topic --describe
+```
 
-# Connect to spark 
+## Airflow DAGs
+
+The repository includes sample DAGs:
+
+1. **data_pipeline_dag**: Processes lottery data and sends to Kafka
+2. **kafka_monitoring_dag**: Monitors Kafka health and topics
+
+## Data Pipeline Flow
+
+1. **Airflow** orchestrates the workflow
+2. **Data processing** reads CSV files and transforms data
+3. **Kafka** streams processed data
+4. **Spark** performs analytics and ML processing
+5. **Monitoring** tracks pipeline health
+
+## Development
+
+- DAGs: `./airflow/dags/`
+- Kafka scripts: `./kafka/`
+- Data: `./data/`
+- Notebooks: `./notebooks/` 

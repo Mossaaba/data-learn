@@ -1,84 +1,277 @@
-version: '3.8'
+# Docker Compose configuration for a complete data pipeline stack
+# Includes: Kafka, Zookeeper, PySpark, AKHQ, Airflow, and PostgreSQL
+version: "3.8"
+
 services:
+  # ===== KAFKA ECOSYSTEM =====
+
+  # Zookeeper - Coordination service for Kafka cluster
+  # Manages Kafka brokers, topics, and partitions metadata
   zookeeper:
     image: confluentinc/cp-zookeeper:7.4.0
     environment:
+      # Port for client connections (Kafka brokers connect here)
       ZOOKEEPER_CLIENT_PORT: 2181
+      # Basic time unit in milliseconds for heartbeats and timeouts
       ZOOKEEPER_TICK_TIME: 2000
     ports:
-      - "2181:2181"
+      - "2181:2181" # Expose Zookeeper client port to host
 
+  # Kafka Broker - Distributed streaming platform
+  # Handles message publishing, subscribing, and storage
   kafka:
     image: confluentinc/cp-kafka:7.4.0
     depends_on:
-      - zookeeper
+      - zookeeper # Kafka requires Zookeeper for coordination
     environment:
+      # Unique identifier for this Kafka broker in the cluster
       KAFKA_BROKER_ID: 1
+      # Connection string to Zookeeper ensemble
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      # Network interfaces Kafka binds to (0.0.0.0 = all interfaces)
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      # Address clients use to connect (internal Docker network name)
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      # Replication factor for internal topics (1 = no replication, single broker)
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
     ports:
-      - "9092:9092"  # Exposes Kafka to the Codespaces host preview if needed
+      - "9092:9092" # Expose Kafka broker port to host
+    # Health check to ensure Kafka is ready before dependent services start
     healthcheck:
-      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      test:
+        [
+          "CMD",
+          "kafka-topics",
+          "--bootstrap-server",
+          "localhost:9092",
+          "--list",
+        ]
+      interval: 10s # Check every 10 seconds
+      timeout: 5s # Timeout after 5 seconds
+      retries: 5 # Retry 5 times before marking as unhealthy
 
-  pyspark:
-    image: jupyter/pyspark-notebook:latest
-    depends_on:
-      - kafka
-    environment:
-      - PYSPARK_PYTHON=python3
-    ports:
-      - "8888:8888"   # Jupyter Notebook UI
-      - "4040:4040"   # Spark UI
-    volumes:
-      - ./notebooks:/home/jovyan/work  
-      - ./data:/home/jovyan/work
+  # ===== KAFKA MANAGEMENT UI =====
+
+  # AKHQ - Kafka management and monitoring web interface
+  # Provides GUI for viewing topics, messages, consumers, and cluster health
   akhq:
     image: tchiotludo/akhq:latest
     depends_on:
       kafka:
-        condition: service_healthy
+        condition: service_healthy # Wait for Kafka health check to pass
     ports:
-      - "8080:8080"
+      - "8080:8080" # Web interface for Kafka management
     environment:
+      # AKHQ configuration in YAML format
       AKHQ_CONFIGURATION: |
         akhq:
           connections:
-            local-kafka:
+            local-kafka:              # Connection name in AKHQ UI
               properties:
-                bootstrap.servers: kafka:9092
+                bootstrap.servers: kafka:9092  # Kafka broker connection
 
+  # ===== KAFKA APPLICATIONS =====
+
+  # Kafka Producer - Generates and publishes messages to Kafka topics
+  # Custom application that sends data streams to Kafka
   kafka-producer:
     build:
-      context: ./kafka
+      context: ./kafka # Build from local Dockerfile in kafka directory
     depends_on:
       kafka:
-        condition: service_healthy
+        condition: service_healthy # Ensure Kafka is ready before starting
     environment:
+      # Disable Python output buffering for real-time logging
       - PYTHONUNBUFFERED=1
-    command: ["python", "kafka-producer.py"]
+    command: ["python", "kafka-producer.py"] # Run the producer script
     volumes:
+      # Mount kafka directory for code changes without rebuild
       - ./kafka:/app
     networks:
-      - default
+      - default # Use default Docker network for service communication
 
+  # Kafka Consumer - Reads and processes messages from Kafka topics
+  # Custom application that consumes data streams from Kafka
   kafka-consumer:
     build:
-      context: ./kafka
+      context: ./kafka # Build from local Dockerfile in kafka directory
     depends_on:
       kafka:
-        condition: service_healthy
+        condition: service_healthy # Ensure Kafka is ready before starting
     environment:
+      # Disable Python output buffering for real-time logging
       - PYTHONUNBUFFERED=1
-    command: ["python", "kafka-consumer.py"]
+    command: ["python", "kafka-consumer.py"] # Run the consumer script
     volumes:
+      # Mount kafka directory for code changes without rebuild
       - ./kafka:/app
     networks:
-      - default
+      - default # Use default Docker network for service communication
+  # ===== DATA PROCESSING =====
 
-                
+  # PySpark Jupyter Notebook - Interactive data processing environment
+  # Provides Jupyter notebooks with Spark for big data analytics
+  pyspark:
+    image: jupyter/pyspark-notebook:latest
+    depends_on:
+      - kafka # Wait for Kafka to be available for streaming data
+    environment:
+      # Ensure Python 3 is used for PySpark operations
+      - PYSPARK_PYTHON=python3
+    ports:
+      - "8888:8888" # Jupyter notebook web interface
+      - "4040:4040" # Spark UI for monitoring jobs and executors
+    volumes:
+      # Mount local directories for persistent notebook and data access
+      - ./notebooks:/home/jovyan/work # Jupyter notebooks storage
+      - ./data:/home/jovyan/work # Shared data directory
+
+  # ===== AIRFLOW WORKFLOW ORCHESTRATION =====
+
+  # PostgreSQL Database - Backend database for Airflow metadata
+  # Stores DAG definitions, task instances, connections, and execution history
+  postgres:
+    image: postgres:13
+    environment:
+      # Database credentials for Airflow backend
+      POSTGRES_USER: airflow # Database username
+      POSTGRES_PASSWORD: airflow # Database password (change in production!)
+      POSTGRES_DB: airflow # Database name for Airflow metadata
+    volumes:
+      # Persistent storage for database data
+      - postgres_db_volume:/var/lib/postgresql/data
+    healthcheck:
+      # Check if PostgreSQL is ready to accept connections
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s # Check every 5 seconds
+      retries: 5 # Retry 5 times before marking unhealthy
+    restart: always # Always restart container if it stops
+
+  # Airflow Webserver - Web UI for workflow management
+  # Provides the main interface for viewing DAGs, tasks, and execution logs
+  airflow-webserver:
+    build:
+      context: ./airflow # Build from local Dockerfile in airflow directory
+    depends_on:
+      postgres:
+        condition: service_healthy # Wait for database to be ready
+      kafka:
+        condition: service_healthy # Wait for Kafka for data pipeline DAGs
+    environment:
+      # Airflow configuration via environment variables
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor # Use LocalExecutor (single machine)
+      # Database connection string for metadata storage
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__FERNET_KEY: "" # Encryption key (empty for dev, set in prod)
+      # Auto-enable new DAGs when added
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+      # Don't load Airflow example DAGs
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      # Enable basic auth and session-based authentication
+      AIRFLOW__API__AUTH_BACKENDS: "airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session"
+      # Enable health check endpoint for monitoring
+      AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
+    volumes:
+      # Mount directories for DAGs, logs, plugins, and data access
+      - ./airflow/dags:/opt/airflow/dags # DAG definitions
+      - ./airflow/logs:/opt/airflow/logs # Execution logs
+      - ./airflow/plugins:/opt/airflow/plugins # Custom plugins
+      - ./data:/opt/airflow/data # Shared data directory
+      - ./kafka:/opt/airflow/kafka # Kafka scripts access
+    ports:
+      - "8081:8080" # Web UI (port 8080 used by AKHQ, so using 8081)
+    command: webserver # Start Airflow webserver process
+    healthcheck:
+      # Check if webserver is responding to HTTP requests
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 10s # Check every 10 seconds
+      timeout: 10s # Timeout after 10 seconds
+      retries: 5 # Retry 5 times before marking unhealthy
+    restart: always # Always restart if container stops
+
+  # Airflow Scheduler - Core component that triggers DAG execution
+  # Monitors DAGs and schedules tasks based on their dependencies and timing
+  airflow-scheduler:
+    build:
+      context: ./airflow # Build from local Dockerfile in airflow directory
+    depends_on:
+      postgres:
+        condition: service_healthy # Wait for database to be ready
+      kafka:
+        condition: service_healthy # Wait for Kafka for data pipeline DAGs
+    environment:
+      # Airflow configuration (same as webserver for consistency)
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor # Use LocalExecutor for task execution
+      # Database connection string for metadata storage
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__FERNET_KEY: "" # Encryption key (empty for dev)
+      # Auto-enable new DAGs when added
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+      # Don't load Airflow example DAGs
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      # Enable basic auth and session-based authentication
+      AIRFLOW__API__AUTH_BACKENDS: "airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session"
+      # Enable health check endpoint for monitoring
+      AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
+    volumes:
+      # Mount same directories as webserver for consistency
+      - ./airflow/dags:/opt/airflow/dags # DAG definitions to monitor
+      - ./airflow/logs:/opt/airflow/logs # Write execution logs
+      - ./airflow/plugins:/opt/airflow/plugins # Custom plugins access
+      - ./data:/opt/airflow/data # Shared data directory
+      - ./kafka:/opt/airflow/kafka # Kafka scripts access
+    command: scheduler # Start Airflow scheduler process
+    healthcheck:
+      # Check if scheduler job is running properly
+      test:
+        [
+          "CMD-SHELL",
+          'airflow jobs check --job-type SchedulerJob --hostname "${HOSTNAME}"',
+        ]
+      interval: 10s # Check every 10 seconds
+      timeout: 10s # Timeout after 10 seconds
+      retries: 5 # Retry 5 times before marking unhealthy
+    restart: always # Always restart if container stops
+
+  # Airflow Initialization - One-time setup for database and admin user
+  # Runs database migrations and creates the initial admin user
+  airflow-init:
+    build:
+      context: ./airflow # Build from local Dockerfile in airflow directory
+    depends_on:
+      postgres:
+        condition: service_healthy # Wait for database to be ready
+    environment:
+      # Airflow configuration (same as other components)
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      # Database connection string for metadata storage
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__FERNET_KEY: "" # Encryption key (empty for dev)
+      # Auto-enable new DAGs when added
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+      # Don't load Airflow example DAGs
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      # Enable basic auth and session-based authentication
+      AIRFLOW__API__AUTH_BACKENDS: "airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session"
+
+      # Initialization-specific environment variables
+      _AIRFLOW_DB_UPGRADE: "true" # Run database schema migrations
+      _AIRFLOW_WWW_USER_CREATE: "true" # Create initial web UI user
+      _AIRFLOW_WWW_USER_USERNAME: admin # Default admin username
+      _AIRFLOW_WWW_USER_PASSWORD: admin # Default admin password (change in production!)
+    volumes:
+      # Mount same directories for consistency (though init may not need all)
+      - ./airflow/dags:/opt/airflow/dags # DAG definitions
+      - ./airflow/logs:/opt/airflow/logs # Logs directory
+      - ./airflow/plugins:/opt/airflow/plugins # Custom plugins
+      - ./data:/opt/airflow/data # Shared data directory
+      - ./kafka:/opt/airflow/kafka # Kafka scripts access
+    command: version # Simple command that exits after initialization
+    restart: "no" # Don't restart - this is a one-time initialization
+
+# ===== PERSISTENT STORAGE =====
+
+volumes:
+  # Named volume for PostgreSQL data persistence
+  # Ensures database data survives container restarts and updates
+  postgres_db_volume:
