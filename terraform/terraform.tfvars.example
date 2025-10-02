@@ -1,0 +1,44 @@
+# Example Terraform variables file
+# Copy this to terraform.tfvars and customize with your values
+
+# ===== REQUIRED VARIABLES =====
+project_id      = "your-gcp-project-id"
+billing_account = "your-billing-account-id"
+alert_email     = "your-email@example.com"
+
+# ===== GENERAL CONFIGURATION =====
+region      = "us-central1"
+zone        = "us-central1-a"
+environment = "dev"
+
+# ===== COMPUTE CONFIGURATION =====
+kafka_machine_type   = "e2-standard-2"  # 2 vCPUs, 8GB RAM
+spark_machine_type   = "e2-standard-4"  # 4 vCPUs, 16GB RAM
+airflow_machine_type = "e2-standard-2"  # 2 vCPUs, 8GB RAM
+
+# ===== DATA WAREHOUSE CONFIGURATION =====
+# Choose one: "bigquery", "redshift", or "snowflake"
+data_warehouse_type = "bigquery"
+
+# BigQuery settings (if using BigQuery)
+bigquery_dataset_id = "data_pipeline"
+
+# AWS/Redshift settings (if using Redshift)
+# aws_region                = "us-east-1"
+# aws_access_key           = "your-aws-access-key"
+# aws_secret_key           = "your-aws-secret-key"
+# redshift_cluster_id      = "data-pipeline-cluster"
+# redshift_database_name   = "data_pipeline"
+# redshift_master_username = "admin"
+# redshift_master_password = "YourSecurePassword123!"
+
+# Snowflake settings (if using Snowflake)
+# snowflake_account   = "your-account.region"
+# snowflake_username  = "your-username"
+# snowflake_password  = "your-password"
+# snowflake_database  = "DATA_PIPELINE"
+# snowflake_warehouse = "COMPUTE_WH"
+# snowflake_schema    = "PUBLIC"
+
+# ===== MONITORING CONFIGURATION =====
+budget_amount = 100  # USD per month
