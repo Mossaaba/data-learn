@@ -1,3 +1,0 @@
-{
-  "postStartCommand": "/bin/bash .devcontainer/scripts/startup.sh"
-}
